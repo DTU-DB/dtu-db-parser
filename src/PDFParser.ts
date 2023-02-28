@@ -101,7 +101,6 @@ export class PDFParser{
 
     parsePage(page: Array<PDFToken>){
         let ignoreTokenNum: number = 0;
-        let endFlag = false;
         let resultsFlag = false;
         
         let miscInfo: MiscInfo = {
@@ -115,50 +114,49 @@ export class PDFParser{
 
         let studentFlag: boolean = false;
         let studentInfo: StudentInfo = new StudentInfo()
-        
-        page.forEach((token: PDFToken, i: number, data: Array<PDFToken>) => {
-            if(endFlag) return;
+
+        for (let i = 0; i < page.length; ++i){
+            let token = page[i];
             
             // console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
             
             if(ignoreTokenNum){
                 --ignoreTokenNum;
-                return;
+                continue;
             }
     
             if (!resultsFlag){
                 if (token.text === PROGRAM_PREFIX_TOKEN_TEXT){
-                    miscInfo.degree = data[i+1].text;
-                    return
+                    miscInfo.degree = page[i+1].text;
+                    continue
                 }
                 
                 if (token.text === SEMESTER_PREFIX_TOKEN_TEXT){
-                    miscInfo.currentsem = deromanize(data[i+1].text);
-                    return
+                    miscInfo.currentsem = deromanize(page[i+1].text);
+                    continue
                 }
     
                 if (token.text === RESULT_BLOCK_TOKEN_TEXT){
                     resultsFlag = true;
-                    return
+                    continue
                 }
             }
     
             else {
                 if (END_OF_PAGE_REGEX.test(token.text)){
-                    endFlag = true;
                     return;
                 }
     
                 if (token.text === SUBJECT_PREFIX_TOKEN_TEXT){
                     subjectFlag = true;
-                    return
+                    continue;
                 }
     
                 if (token.text === RESULT_BLOCK_TOKEN_TEXT){
                     subjectFlag = true;
                     studentFlag = false;
                     subjectInfo = new SubjectInfo();
-                    return
+                    continue;
                 }
     
                 if(subjectFlag){
@@ -173,7 +171,7 @@ export class PDFParser{
                     
                     else if (token.text === SUBJECT_CREDIT_PREFIX_TOKEN_TEXT){
                         subjectInfo.iter = i + 1;
-                        let subjectCreditTokens = this.getNextTokens(data, subjectInfo.codes.length, subjectInfo)
+                        let subjectCreditTokens = this.getNextTokens(page, subjectInfo.codes.length, subjectInfo)
                         subjectCreditTokens.forEach(tok => subjectInfo.credits.push(parseInt(tok.text)))
                         subjectFlag = false;
                         studentFlag = true;
@@ -186,21 +184,21 @@ export class PDFParser{
                     // console.log(subjectInfo)
                     studentInfo.iter = i
     
-                    let nameToken = this.getNextTokens(data, 1, studentInfo)[0]
+                    let nameToken = this.getNextTokens(page, 1, studentInfo)[0]
                     studentInfo.name = nameToken.text
     
-                    let nextToken = this.getNextTokens(data, 1, studentInfo)[0]
+                    let nextToken = this.getNextTokens(page, 1, studentInfo)[0]
                     if (!this.isNumber(nextToken.text)){
                         studentInfo.name += " " + nextToken.text
                         studentInfo.iter++;
                     }
                     
-                    let rollnoToken = this.getNextTokens(data, 1, studentInfo)[0]
+                    let rollnoToken = this.getNextTokens(page, 1, studentInfo)[0]
                     // console.log(rollnoToken)
                     if (this.isFirstYearRollNo(rollnoToken.text)) studentInfo.firstyearrollno = rollnoToken.text
                     else studentInfo.rollno = rollnoToken.text
     
-                    let gradeTokens = this.getNextTokens(data, subjectInfo.credits.length, studentInfo)
+                    let gradeTokens = this.getNextTokens(page, subjectInfo.credits.length, studentInfo)
                     if (this.areValidGradeTokens(gradeTokens)){
                         gradeTokens.forEach(tok => studentInfo.grades.push(tok.text));
                     }
@@ -211,19 +209,19 @@ export class PDFParser{
                         studentInfo.iter -= missingGrades;
                     }
                     
-                    let totalCreditToken = this.getNextTokens(data, 1, studentInfo)[0];
+                    let totalCreditToken = this.getNextTokens(page, 1, studentInfo)[0];
                     // if(!totalCreditToken){
                     //     console.log(data)
                     //     console.log(gradeTokens);
                     // }
                     studentInfo.totalcredits = parseInt(totalCreditToken.text);
                     
-                    let sgpaToken = this.getNextTokens(data, 1, studentInfo)[0];
+                    let sgpaToken = this.getNextTokens(page, 1, studentInfo)[0];
                     studentInfo.sgpa = parseFloat(sgpaToken.text);
     
                     studentInfo.failed = Array(studentInfo.grades.length).fill(false);
     
-                    let papersFailedToken = this.getNextTokens(data, 1, studentInfo)[0];
+                    let papersFailedToken = this.getNextTokens(page, 1, studentInfo)[0];
                     do{
                         if (subjectInfo.codes.some(code => papersFailedToken.text.includes(code))){
                             papersFailedToken.text.split(',').forEach((code: string) => {
@@ -234,7 +232,7 @@ export class PDFParser{
                         else{
                             studentInfo.iter -= 1
                         }
-                        papersFailedToken = this.getNextTokens(data, 1, studentInfo)[0];
+                        papersFailedToken = this.getNextTokens(page, 1, studentInfo)[0];
                     } while(subjectInfo.codes.some(code => papersFailedToken.text.includes(code)))
                     studentInfo.iter -= 1
                                     
@@ -248,10 +246,8 @@ export class PDFParser{
                     studentInfo = new StudentInfo();
     
                 }
-            }
-            
-            
-        });
+            }   
+        }
     }
 
     getNextTokens(data: Array<PDFToken>, n: number, info:{iter: number}): Array<PDFToken> {
