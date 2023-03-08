@@ -3,19 +3,25 @@ import * as fs from "fs";
 
 
 async function main(){
-    let pj = new PDFParser("O19_BTECH_1_1015.pdf")
+    let pj = new PDFParser("E22_BTECH_VI.pdf")
     await pj.readPDF();
+    // console.log('readpdf')
+    // console.log(pj.pages[0])
     await pj.parsePages()
+    // pj.parsePageNew(pj.pages[0])
     console.log(pj.students.length)
-    fs.writeFile('../test.json', JSON.stringify(pj.students), (err) => {
-        if (err) throw err
-    });
-    
-    // pj.students.forEach((student, i) => {
-    //     student.semester.subjects.forEach(sub => {
-    //         if (sub.grade == '') console.log(i, student.rollno) 
-    //     })
-    // })
+    // fs.writeFile('../testnew.json', JSON.stringify(pj.students), (err) => {
+    //     if (err) throw err
+    // });
+    let total = 0
+    pj.students.forEach((student, i) => {
+        if (student.semester.subjects.some(sub => sub.grade === "")){
+            console.log(student.name);
+            total++;
+        }
+    })
+    console.log(total);
+
 }
 
 main()

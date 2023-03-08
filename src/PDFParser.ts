@@ -5,9 +5,16 @@ import { deromanize } from "romans";
 type PDFSource = string | Buffer;
 type PDFToken = {text: string, x: number, y: number};
 
+const PRECISION = 0.001;
+
 const PROGRAM_PREFIX_TOKEN_TEXT = "Program :";
 const SEMESTER_PREFIX_TOKEN_TEXT = "Sem :";
-const RESULT_BLOCK_TOKEN_TEXT = "Sr.No";
+
+const RESULT_BLOCK_START_TOKEN_TEXT = "Sr.No";
+
+const NAME_HEADER_TOKEN_TEXT = "Name";
+const ROLLNO_HEADER_TOKEN_TEXT = "Roll No.";
+
 const SUBJECT_PREFIX_TOKEN_TEXT = "Credits";
 const SUBJECT_INFO_REGEX = /:/;
 const SUBJECT_CREDIT_PREFIX_TOKEN_TEXT = "Papers Failed";
@@ -16,16 +23,32 @@ const END_OF_PAGE_REGEX = /Page\s\d+/;
 const VALID_GRADES = ["O", "A+", "A", "B+", "B", "C", "P", "F", "DT", "RW", "RL", "AB", "I", "UFM"];
 
 
+interface StudentHeadersLoc{
+    name: {x: number, y: number},
+    rollno: {x: number, y: number}
+}
+
+interface SubjectHeadersLoc{
+    subjects: Array<{x: number, y: number}>,
+    totalcredits: {x: number, y: number},
+    sgpa: {x: number, y: number},
+    failed: {x: number, y: number}
+}
+
 class SubjectInfo{
-    iter: number = 0;
     codes: Array<string> = [];
     names: Array<string> = [];
     credits: Array<number> = [];
-    x: Array<number> = [];  // TODO: give better name
+    headersLoc: SubjectHeadersLoc = {
+        subjects: [],
+        totalcredits: {x: 0, y: 0},
+        sgpa: {x: 0, y: 0},
+        failed: {x: 0, y: 0},
+    };
+    length: number = 0;
 };
 
 class StudentInfo{
-    iter: number = 0;
     name: string = "";
     rollno: string = "";
     firstyearrollno: string = "";
@@ -40,6 +63,10 @@ interface MiscInfo{
     currentsem: number
 }
 
+// TODO: give better function name
+function fcomp(a: number, b: number): boolean{
+    return Math.abs(a - b) <= PRECISION
+}
 
 export class PDFParser{
     pageNum: number = 0;
@@ -53,7 +80,7 @@ export class PDFParser{
         this.pdf = pdf;
     }
 
-    item_callback(err: Error, item: any, resolve: any, reject: any){
+    itemCallback(err: Error, item: any, resolve: any, reject: any){
         if (!item){
             this.pages.push(this.pageData)
             this.pageData = [];
@@ -63,7 +90,7 @@ export class PDFParser{
 
         else if (item.page){
             this.pageNum = item.page;
-            if (this.pageData){
+            if (this.pageData.length){
                 this.pages.push(this.pageData)
                 this.pageData = [];
             }
@@ -80,12 +107,12 @@ export class PDFParser{
         let pdf_promise: Promise<void>;
         if (typeof this.pdf === 'string') pdf_promise = new Promise<void>((resolve, reject) => {
             this.reader.parseFileItems(this.pdf, (err: Error, item: any) => {
-                this.item_callback(err, item, resolve, reject);
+                this.itemCallback(err, item, resolve, reject);
             });  
         });
         else pdf_promise = new Promise<void>((resolve, reject) => {
             this.reader.parseBuffer(this.pdf, (err: Error, item: any) => {
-                this.item_callback(err, item, resolve, reject);
+                this.itemCallback(err, item, resolve, reject);
             });
         });
         return pdf_promise;
@@ -93,170 +120,202 @@ export class PDFParser{
 
     async parsePages(){
         let parse_promise = new Promise<void>((resolve) => {
-            this.pages.forEach(page => this.parsePage(page));
+            this.pages.forEach((page, i) => {
+                this.parsePage(page)
+            });
             resolve();
         }) 
         return parse_promise;
-    } 
-
+    }
+    
     parsePage(page: Array<PDFToken>){
-        let ignoreTokenNum: number = 0;
-        let resultsFlag = false;
+        // for (let i = 0; i < page.length; ++i){
+        //         let token = page[i];
+        //         console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
+        // }
+            
+        let iter = {val: 0}
+        let isPageEnd = false;
+
+        const miscInfo = this.getMiscInfo(page, iter);
+            
+        while (!isPageEnd){
+            const studentHeadersLoc = this.getStudentHeadersLoc(page, iter);
+            const subjectInfo = this.getSubjectInfo(page, iter);
+            this.addStudents(page, miscInfo, subjectInfo, studentHeadersLoc, iter);
+            
+            if (END_OF_PAGE_REGEX.test(page[iter.val].text)){
+                isPageEnd = true;
+            }
+        }
+    }
+
+    addStudents(page: Array<PDFToken>, miscInfo: MiscInfo, subjectInfo: SubjectInfo,  studentHeadersLoc: StudentHeadersLoc, iter: {val: number}){
+        let studentInfo = new StudentInfo()
+
+        let i = iter.val;
+        let token = page[i];
+
+        while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
+            
+            // Skip Row without Name or skip to next correct row.
+            while(!fcomp(token.x, studentHeadersLoc.name.x)){
+                token = page[++i];
+                
+                // Go to next result block or end of page
+                if (token.text === RESULT_BLOCK_START_TOKEN_TEXT || END_OF_PAGE_REGEX.test(token.text)){
+                    iter.val = i;
+                    return;
+                }
+            }
+            
+            // Name
+            while(fcomp(token.x, studentHeadersLoc.name.x)){
+                if (studentInfo.name) studentInfo.name += " "
+                studentInfo.name += token.text;
+                token = page[++i];
+            }
+
+            // Sr. No.
+            token = page[++i]
+
+            // Roll No.
+            let rollno = token.text
+            if (this.isFirstYearRollNo(rollno)) studentInfo.firstyearrollno = rollno
+            else studentInfo.rollno = rollno
+            token = page[++i];
+            
+            // Grades
+            studentInfo.grades = Array(subjectInfo.length).fill("");
+            let gradeInd = subjectInfo.headersLoc.subjects.findIndex(loc => fcomp(token.x, loc.x));
+            while(gradeInd !== -1){
+                studentInfo.grades[gradeInd] = token.text;
+                token = page[++i];
+                gradeInd = subjectInfo.headersLoc.subjects.findIndex(loc => fcomp(token.x, loc.x));
+            }
+            
+            // Total Credits
+            studentInfo.totalcredits = parseInt(token.text);
+            token = page[++i];
+            
+            // SGPA
+            studentInfo.sgpa = parseFloat(token.text);
+            token = page[++i];
+            
+            // Papers Failed
+            studentInfo.failed = Array(subjectInfo.length).fill(false);
+            while(fcomp(token.x, subjectInfo.headersLoc.failed.x) || subjectInfo.codes.some(code => token.text.includes(code))){
+                token.text.split(",").forEach(code => {
+                    code = code.trim();
+                    studentInfo.failed[subjectInfo.codes.findIndex((ele) => ele === code)] = true;
+                })
+                token = page[++i];
+            }
+
+            this.students.push(this.generateStudent(miscInfo, subjectInfo, studentInfo));
+
+            studentInfo = new StudentInfo();
+            
+            if (END_OF_PAGE_REGEX.test(token.text)){
+                iter.val = i;
+                return;
+            }
+        }
+
+        iter.val = i;
+        return;
+
+    }
+
+    getSubjectInfo(page: Array<PDFToken>, iter: {val: number}): SubjectInfo{
+        let subjectInfo: SubjectInfo = new SubjectInfo()
         
+        let i = iter.val;
+        let token = page[i];
+
+        while(SUBJECT_INFO_REGEX.test(token.text)){
+            let [subjectCode, subjectName] = token.text.split(':').map((ele) => ele.trim())
+            subjectInfo.codes.push(subjectCode);
+            subjectInfo.names.push(subjectName);
+            let tokenLoc = {x: token.x, y: token.y};
+            token = page[++i];
+            while(fcomp(token.x, tokenLoc.x)){
+                subjectInfo.names[subjectInfo.names.length - 1] += " " + token.text;
+                token = page[++i];
+            }
+        }
+
+        subjectInfo.length = subjectInfo.codes.length;
+
+        for(let j = 0; j < subjectInfo.length; ++j){
+            subjectInfo.headersLoc.subjects.push({x: token.x, y: token.y});
+            token = page[++i];
+        }
+
+        subjectInfo.headersLoc.totalcredits = {x: token.x, y: token.y};
+        token = page[++i];
+
+        subjectInfo.headersLoc.sgpa = {x: token.x, y: token.y};
+        token = page[++i];
+
+        subjectInfo.headersLoc.failed = {x: token.x, y: token.y};
+        token = page[++i];
+
+        for(let j = 0; j < subjectInfo.length; ++j){
+            subjectInfo.credits.push(parseInt(token.text));
+            token = page[++i];
+        }
+
+        iter.val = i;
+        return subjectInfo;
+        
+    }
+
+    getStudentHeadersLoc(page: Array<PDFToken>, iter: {val: number}): StudentHeadersLoc{
+        let studentHeadersLoc: StudentHeadersLoc = {
+            name: {x: 0, y: 0},
+            rollno: {x: 0, y: 0}
+        }
+        
+        let i = iter.val;
+        let token = page[i];
+
+        while(token.text !== SUBJECT_PREFIX_TOKEN_TEXT){
+            if (token.text === NAME_HEADER_TOKEN_TEXT){
+                [studentHeadersLoc.name.x, studentHeadersLoc.name.y] = [token.x, token.y]
+            }
+
+            if (token.text === ROLLNO_HEADER_TOKEN_TEXT){
+                [studentHeadersLoc.rollno.x, studentHeadersLoc.rollno.y] = [token.x, token.y]
+            }
+
+            token = page[++i];
+        }
+        
+        iter.val = i+1;
+        return studentHeadersLoc;
+    }
+
+    getMiscInfo(page: Array<PDFToken>, iter: {val: number}){
         let miscInfo: MiscInfo = {
             degree: "",
             currentsem: 0
         }
         
-        let subjectFlag: boolean = false;
-        let subjectInfo: SubjectInfo = new SubjectInfo()
+        let i = iter.val;
+        let token = page[i];
 
-
-        let studentFlag: boolean = false;
-        let studentInfo: StudentInfo = new StudentInfo()
-
-        for (let i = 0; i < page.length; ++i){
-            let token = page[i];
+        
+        while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
             
-            // console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
-            
-            if(ignoreTokenNum){
-                --ignoreTokenNum;
-                continue;
-            }
-    
-            if (!resultsFlag){
-                if (token.text === PROGRAM_PREFIX_TOKEN_TEXT){
-                    miscInfo.degree = page[i+1].text;
-                    continue
-                }
-                
-                if (token.text === SEMESTER_PREFIX_TOKEN_TEXT){
-                    miscInfo.currentsem = deromanize(page[i+1].text);
-                    continue
-                }
-    
-                if (token.text === RESULT_BLOCK_TOKEN_TEXT){
-                    resultsFlag = true;
-                    continue
-                }
-            }
-    
-            else {
-                if (END_OF_PAGE_REGEX.test(token.text)){
-                    return;
-                }
-    
-                if (token.text === SUBJECT_PREFIX_TOKEN_TEXT){
-                    subjectFlag = true;
-                    continue;
-                }
-    
-                if (token.text === RESULT_BLOCK_TOKEN_TEXT){
-                    subjectFlag = true;
-                    studentFlag = false;
-                    subjectInfo = new SubjectInfo();
-                    continue;
-                }
-    
-                if(subjectFlag){
+            if (token.text === PROGRAM_PREFIX_TOKEN_TEXT) miscInfo.degree = page[i+1].text;
+            if (token.text === SEMESTER_PREFIX_TOKEN_TEXT) miscInfo.currentsem = deromanize(page[i+1].text);
 
-                    if (SUBJECT_INFO_REGEX.test(token.text)){
-                        let [subjectCode, subjectName] = token.text.split(':').map((ele) => ele.trim())
-                        subjectInfo.codes.push(subjectCode);
-                        subjectInfo.names.push(subjectName);
-                    }
-                    
-                    else if (subjectInfo.codes.includes(token.text)) subjectInfo.x.push(token.x)
-                    
-                    else if (token.text === SUBJECT_CREDIT_PREFIX_TOKEN_TEXT){
-                        subjectInfo.iter = i + 1;
-                        let subjectCreditTokens = this.getNextTokens(page, subjectInfo.codes.length, subjectInfo)
-                        subjectCreditTokens.forEach(tok => subjectInfo.credits.push(parseInt(tok.text)))
-                        subjectFlag = false;
-                        studentFlag = true;
-                        ignoreTokenNum = subjectInfo.codes.length;
-                    }
-                    // console.log(token)
-                }
-                
-                else if(studentFlag){
-                    // console.log(subjectInfo)
-                    studentInfo.iter = i
-    
-                    let nameToken = this.getNextTokens(page, 1, studentInfo)[0]
-                    studentInfo.name = nameToken.text
-    
-                    let nextToken = this.getNextTokens(page, 1, studentInfo)[0]
-                    if (!this.isNumber(nextToken.text)){
-                        studentInfo.name += " " + nextToken.text
-                        studentInfo.iter++;
-                    }
-                    
-                    let rollnoToken = this.getNextTokens(page, 1, studentInfo)[0]
-                    // console.log(rollnoToken)
-                    if (this.isFirstYearRollNo(rollnoToken.text)) studentInfo.firstyearrollno = rollnoToken.text
-                    else studentInfo.rollno = rollnoToken.text
-    
-                    let gradeTokens = this.getNextTokens(page, subjectInfo.credits.length, studentInfo)
-                    if (this.areValidGradeTokens(gradeTokens)){
-                        gradeTokens.forEach(tok => studentInfo.grades.push(tok.text));
-                    }
-                    
-                    else{
-                        let [placeHolderGrades, missingGrades] = this.getPlaceholderGrades(gradeTokens, subjectInfo.x)
-                        placeHolderGrades.forEach(grade => studentInfo.grades.push(grade));
-                        studentInfo.iter -= missingGrades;
-                    }
-                    
-                    let totalCreditToken = this.getNextTokens(page, 1, studentInfo)[0];
-                    // if(!totalCreditToken){
-                    //     console.log(data)
-                    //     console.log(gradeTokens);
-                    // }
-                    studentInfo.totalcredits = parseInt(totalCreditToken.text);
-                    
-                    let sgpaToken = this.getNextTokens(page, 1, studentInfo)[0];
-                    studentInfo.sgpa = parseFloat(sgpaToken.text);
-    
-                    studentInfo.failed = Array(studentInfo.grades.length).fill(false);
-    
-                    let papersFailedToken = this.getNextTokens(page, 1, studentInfo)[0];
-                    do{
-                        if (subjectInfo.codes.some(code => papersFailedToken.text.includes(code))){
-                            papersFailedToken.text.split(',').forEach((code: string) => {
-                                code = code.trim();
-                                studentInfo.failed[subjectInfo.codes.findIndex((ele) => ele === code)] = true;
-                            });
-                        } 
-                        else{
-                            studentInfo.iter -= 1
-                        }
-                        papersFailedToken = this.getNextTokens(page, 1, studentInfo)[0];
-                    } while(subjectInfo.codes.some(code => papersFailedToken.text.includes(code)))
-                    studentInfo.iter -= 1
-                                    
-                    
-                    // console.log(studentInfo);
-    
-                    this.students.push(this.generateStudent(miscInfo, subjectInfo, studentInfo));
-    
-                    ignoreTokenNum = studentInfo.iter - i - 1;
-                    
-                    studentInfo = new StudentInfo();
-    
-                }
-            }   
+            token = page[++i];
         }
-    }
 
-    getNextTokens(data: Array<PDFToken>, n: number, info:{iter: number}): Array<PDFToken> {
-        info.iter += n
-        let tokens = data.slice(info.iter - n, info.iter).map(ele =>{
-            return {text: ele.text, x: ele.x, y: ele.y}
-        });
-        // console.log(tokens)
-        return tokens
+        iter.val = i;
+        return miscInfo;
     }
 
     generateStudent(misc: MiscInfo, subject: SubjectInfo, student: StudentInfo): Student{
@@ -297,39 +356,11 @@ export class PDFParser{
             });
         }
 
-        return s
-    }
-
-    isNumber(text: string):boolean {
-        const NUMBER_CHECK_REGEX = /\d+/;
-        return NUMBER_CHECK_REGEX.test(text);
+        return s;
     }
 
     isFirstYearRollNo(rollno: string): boolean{
-        let FIRSTYEAR_CODE_REGEX = /[A|B]\d+/;
+        const FIRSTYEAR_CODE_REGEX = /[A|B]\d+/;
         return FIRSTYEAR_CODE_REGEX.test(rollno)
     }
-
-    areValidGradeTokens(gradeTokens: Array<PDFToken>): boolean{
-        // console.log(gradeTokens);
-
-        return gradeTokens.every(grade => VALID_GRADES.includes(grade.text))
-    }
-
-    getPlaceholderGrades(gradeTokens: Array<PDFToken>, subjectInfoX: Array<number>): [Array<string>, number]{
-        const PRECISION = 0.001;
-
-        let validGradeTokens = gradeTokens.filter(grade => VALID_GRADES.includes(grade.text))
-        
-        let missingGrades: number = gradeTokens.length - validGradeTokens.length
-        let placeHolderGrades: Array<string> = Array(gradeTokens.length).fill("");
-
-        validGradeTokens.forEach(gradeToken => {
-            let gradeInd: number = subjectInfoX.findIndex(x => Math.abs(gradeToken.x - x) <= PRECISION)
-            placeHolderGrades[gradeInd] = gradeToken.text 
-        })
-        
-        return [placeHolderGrades, missingGrades];
-    }
-
 }
