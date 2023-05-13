@@ -2,8 +2,16 @@ import { PdfReader } from "pdfreader";
 import { Student } from "./interfaces/student";
 import { deromanize } from "romans";
 
+type Coords = {
+    x: number,
+    y: number
+};
+
 type PDFSource = string | Buffer;
-type PDFToken = {text: string, x: number, y: number};
+type PDFToken = {
+    text: string,
+    coords: Coords
+};
 
 const PRECISION = 0.001;
 
@@ -25,24 +33,23 @@ const PASSING_GRADES = ["O", "A+", "A", "B+", "B", "C", "P"];
 const FAILING_GRADES = ["F", "DT", "RW", "RL", "AB", "I", "UFM"];
 const VALID_GRADES = [...PASSING_GRADES, ...FAILING_GRADES, EMPTY_GRADE];
 
-
-interface StudentHeadersLoc{
-    name: {x: number, y: number},
-    rollno: {x: number, y: number}
+type StudentHeadersCoords = {
+    name: Coords,
+    rollno: Coords
 }
 
-interface SubjectHeadersLoc{
-    subjects: Array<{x: number, y: number}>,
-    totalcredits: {x: number, y: number},
-    sgpa: {x: number, y: number},
-    failed: {x: number, y: number}
+type SubjectHeadersCoords = {
+    subjects: Array<Coords>,
+    totalcredits: Coords,
+    sgpa: Coords,
+    failed: Coords
 }
 
 class SubjectInfo{
     codes: Array<string> = [];
     names: Array<string> = [];
     credits: Array<number> = [];
-    headersLoc: SubjectHeadersLoc = {
+    headersCoords: SubjectHeadersCoords = {
         subjects: [],
         totalcredits: {x: 0, y: 0},
         sgpa: {x: 0, y: 0},
@@ -61,7 +68,7 @@ class StudentInfo{
     failed: Array<boolean> = []
 };
 
-interface MiscInfo{
+type MiscInfo = {
     degree: string,
     currentsem: number
 }
@@ -99,7 +106,7 @@ export class PDFParser{
         }
 
         else if (item.text){
-            this.pageData.push({text: item.text.trim(), x: item.x, y: item.y});
+            this.pageData.push({text: item.text.trim(), coords: {x: item.x, y: item.y}});
         }
 
         else if (err) reject(console.error("error:", err));
