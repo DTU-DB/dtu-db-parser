@@ -20,7 +20,10 @@ const SUBJECT_INFO_REGEX = /:/;
 const SUBJECT_CREDIT_PREFIX_TOKEN_TEXT = "Papers Failed";
 const END_OF_PAGE_REGEX = /Page\s\d+/;
 
-const VALID_GRADES = ["O", "A+", "A", "B+", "B", "C", "P", "F", "DT", "RW", "RL", "AB", "I", "UFM"];
+const EMPTY_GRADE = "";
+const PASSING_GRADES = ["O", "A+", "A", "B+", "B", "C", "P"];
+const FAILING_GRADES = ["F", "DT", "RW", "RL", "AB", "I", "UFM"];
+const VALID_GRADES = [...PASSING_GRADES, ...FAILING_GRADES, EMPTY_GRADE];
 
 
 interface StudentHeadersLoc{
