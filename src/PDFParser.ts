@@ -73,6 +73,35 @@ type MiscInfo = {
     currentsem: number
 }
 
+class PageIterator implements Iterator<PDFToken>{
+    private page: Array<PDFToken>;
+    private i = 0;
+
+    public lastToken: PDFToken = {text: "", coords: {x: 0, y: 0}};
+
+    constructor(page: Array<PDFToken>){
+        this.page = page;
+    }
+
+    next(...args: [] | [undefined]): IteratorResult<PDFToken, any> {
+        if (this.i < this.page.length){
+            const result = {
+                done: false,
+                value: this.page[this.i],
+            }
+            this.i++;
+            this.lastToken = this.page[this.i-1];
+            return result;
+        }
+        else{
+            return {
+                done: true,
+                value: undefined,
+            }
+        }
+    }  
+}
+
 // TODO: give better function name
 function fcomp(a: number, b: number): boolean{
     return Math.abs(a - b) <= PRECISION
@@ -126,18 +155,17 @@ export class PDFParser{
         return new Promise<void>((resolve, reject) => {
             parser(this.pdf, (err, item) => {
                 this.itemCallback(err, item, resolve, reject);
-            });  
+            });
         });
     }
 
     async parsePages(){
-        let parse_promise = new Promise<void>((resolve) => {
+        return new Promise<void>((resolve) => {
             this.pages.forEach((page, i) => {
                 this.parsePage(page)
             });
             resolve();
         }) 
-        return parse_promise;
     }
     
     parsePage(page: Array<PDFToken>){
@@ -146,187 +174,160 @@ export class PDFParser{
         //         console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
         // }
             
-        let iter = {val: 0}
-        let isPageEnd = false;
+        const iter = new PageIterator(page);
 
-        const miscInfo = this.getMiscInfo(page, iter);
-            
-        while (!isPageEnd){
-            const studentHeadersLoc = this.getStudentHeadersLoc(page, iter);
-            const subjectInfo = this.getSubjectInfo(page, iter);
-            this.addStudents(page, miscInfo, subjectInfo, studentHeadersLoc, iter);
-            
-            if (END_OF_PAGE_REGEX.test(page[iter.val].text)){
-                isPageEnd = true;
-            }
+        const miscInfo = this.getMiscInfo(iter);
+
+        while (!END_OF_PAGE_REGEX.test(iter.lastToken.text)){
+            const studentHeadersCoords = this.getStudentHeadersCoords(iter);
+            const subjectInfo = this.getSubjectInfo(iter);
+            this.addStudents(iter, miscInfo, subjectInfo, studentHeadersCoords);
         }
     }
 
-    addStudents(page: Array<PDFToken>, miscInfo: MiscInfo, subjectInfo: SubjectInfo,  studentHeadersLoc: StudentHeadersLoc, iter: {val: number}){
-        let studentInfo = new StudentInfo()
-
-        let i = iter.val;
-        let token = page[i];
+    addStudents(iter: PageIterator, miscInfo: MiscInfo, subjectInfo: SubjectInfo, studentHeadersCoords: StudentHeadersCoords){
+        let token = iter.lastToken;
 
         while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
-            
-            // Skip Row without Name or skip to next correct row.
-            while(!fcomp(token.x, studentHeadersLoc.name.x)){
-                token = page[++i];
-                
-                // Go to next result block or end of page
-                if (token.text === RESULT_BLOCK_START_TOKEN_TEXT || END_OF_PAGE_REGEX.test(token.text)){
-                    iter.val = i;
-                    return;
-                }
+            if (END_OF_PAGE_REGEX.test(token.text)){
+                return;
             }
             
+            // Skip Row without Name or skip to next correct row.
+            if (!fcomp(token.coords.x, studentHeadersCoords.name.x)){
+                token = iter.next().value;
+                continue;
+            }
+            
+            const studentInfo = new StudentInfo()
+            
             // Name
-            while(fcomp(token.x, studentHeadersLoc.name.x)){
+            while(fcomp(token.coords.x, studentHeadersCoords.name.x)){
                 if (studentInfo.name) studentInfo.name += " "
                 studentInfo.name += token.text;
-                token = page[++i];
+                token = iter.next().value;
             }
 
             // Sr. No.
-            token = page[++i]
+            token = iter.next().value
 
             // Roll No.
-            let rollno = token.text
+            const rollno = token.text
             if (this.isFirstYearRollNo(rollno)) studentInfo.firstyearrollno = rollno
             else studentInfo.rollno = rollno
-            token = page[++i];
+            token = iter.next().value;
             
             // Grades
-            studentInfo.grades = Array(subjectInfo.length).fill("");
-            let gradeInd = subjectInfo.headersLoc.subjects.findIndex(loc => fcomp(token.x, loc.x));
+            studentInfo.grades = Array(subjectInfo.length).fill(EMPTY_GRADE);
+            let gradeInd = subjectInfo.headersCoords.subjects.findIndex(loc => fcomp(token.coords.x, loc.x));
             while(gradeInd !== -1){
                 studentInfo.grades[gradeInd] = token.text;
-                token = page[++i];
-                gradeInd = subjectInfo.headersLoc.subjects.findIndex(loc => fcomp(token.x, loc.x));
+                token = iter.next().value;
+                gradeInd = subjectInfo.headersCoords.subjects.findIndex(loc => fcomp(token.coords.x, loc.x));
             }
             
             // Total Credits
             studentInfo.totalcredits = parseInt(token.text);
-            token = page[++i];
+            token = iter.next().value;
             
             // SGPA
             studentInfo.sgpa = parseFloat(token.text);
-            token = page[++i];
+            token = iter.next().value;
             
             // Papers Failed
-            studentInfo.failed = Array(subjectInfo.length).fill(false);
-            while(fcomp(token.x, subjectInfo.headersLoc.failed.x) || subjectInfo.codes.some(code => token.text.includes(code))){
-                token.text.split(",").forEach(code => {
-                    code = code.trim();
-                    studentInfo.failed[subjectInfo.codes.findIndex((ele) => ele === code)] = true;
-                })
-                token = page[++i];
-            }
+            studentInfo.failed = studentInfo.grades.map(grade => FAILING_GRADES.includes(grade));
 
             this.students.push(this.generateStudent(miscInfo, subjectInfo, studentInfo));
-
-            studentInfo = new StudentInfo();
-            
-            if (END_OF_PAGE_REGEX.test(token.text)){
-                iter.val = i;
-                return;
-            }
         }
 
-        iter.val = i;
         return;
 
     }
 
-    getSubjectInfo(page: Array<PDFToken>, iter: {val: number}): SubjectInfo{
-        let subjectInfo: SubjectInfo = new SubjectInfo()
+    getSubjectInfo(iter: PageIterator): SubjectInfo{
+        const subjectInfo  = new SubjectInfo()
         
-        let i = iter.val;
-        let token = page[i];
+        let token = iter.lastToken;
+
+        if (token.text === SUBJECT_PREFIX_TOKEN_TEXT){
+            token = iter.next().value
+        }
 
         while(SUBJECT_INFO_REGEX.test(token.text)){
-            let [subjectCode, subjectName] = token.text.split(':').map((ele) => ele.trim())
+            let [subjectCode, subjectName] = token.text.split(':').map((ele: string) => ele.trim())
             subjectInfo.codes.push(subjectCode);
             subjectInfo.names.push(subjectName);
-            let tokenLoc = {x: token.x, y: token.y};
-            token = page[++i];
-            while(fcomp(token.x, tokenLoc.x)){
+            let tokenCoords = token.coords;
+            token = iter.next().value;
+            while(fcomp(token.coords.x, tokenCoords.x)){
                 subjectInfo.names[subjectInfo.names.length - 1] += " " + token.text;
-                token = page[++i];
+                token = iter.next().value;
             }
         }
 
         subjectInfo.length = subjectInfo.codes.length;
 
-        for(let j = 0; j < subjectInfo.length; ++j){
-            subjectInfo.headersLoc.subjects.push({x: token.x, y: token.y});
-            token = page[++i];
+        while(subjectInfo.headersCoords.subjects.length !== subjectInfo.length){
+            subjectInfo.headersCoords.subjects.push(token.coords);
+            token = iter.next().value;
         }
 
-        subjectInfo.headersLoc.totalcredits = {x: token.x, y: token.y};
-        token = page[++i];
+        subjectInfo.headersCoords.totalcredits = token.coords;
+        token = iter.next().value;
 
-        subjectInfo.headersLoc.sgpa = {x: token.x, y: token.y};
-        token = page[++i];
+        subjectInfo.headersCoords.sgpa = token.coords;
+        token = iter.next().value;
 
-        subjectInfo.headersLoc.failed = {x: token.x, y: token.y};
-        token = page[++i];
+        subjectInfo.headersCoords.failed = token.coords;
+        token = iter.next().value;
 
-        for(let j = 0; j < subjectInfo.length; ++j){
+        while(subjectInfo.credits.length !== subjectInfo.length){
             subjectInfo.credits.push(parseInt(token.text));
-            token = page[++i];
+            token = iter.next().value;
         }
 
-        iter.val = i;
         return subjectInfo;
-        
     }
 
-    getStudentHeadersLoc(page: Array<PDFToken>, iter: {val: number}): StudentHeadersLoc{
-        let studentHeadersLoc: StudentHeadersLoc = {
+    getStudentHeadersCoords(iter: PageIterator): StudentHeadersCoords{
+        const studentHeadersCoords: StudentHeadersCoords = {
             name: {x: 0, y: 0},
             rollno: {x: 0, y: 0}
         }
         
-        let i = iter.val;
-        let token = page[i];
+        let token = iter.lastToken;
 
         while(token.text !== SUBJECT_PREFIX_TOKEN_TEXT){
             if (token.text === NAME_HEADER_TOKEN_TEXT){
-                [studentHeadersLoc.name.x, studentHeadersLoc.name.y] = [token.x, token.y]
+                studentHeadersCoords.name = token.coords
             }
 
             if (token.text === ROLLNO_HEADER_TOKEN_TEXT){
-                [studentHeadersLoc.rollno.x, studentHeadersLoc.rollno.y] = [token.x, token.y]
+                studentHeadersCoords.rollno = token.coords
             }
 
-            token = page[++i];
+            token = iter.next().value;
         }
         
-        iter.val = i+1;
-        return studentHeadersLoc;
+        return studentHeadersCoords;
     }
 
-    getMiscInfo(page: Array<PDFToken>, iter: {val: number}){
+    getMiscInfo(iter: PageIterator){
         let miscInfo: MiscInfo = {
             degree: "",
             currentsem: 0
         }
         
-        let i = iter.val;
-        let token = page[i];
-
+        let token = iter.next().value;
         
         while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
             
-            if (token.text === PROGRAM_PREFIX_TOKEN_TEXT) miscInfo.degree = page[i+1].text;
-            if (token.text === SEMESTER_PREFIX_TOKEN_TEXT) miscInfo.currentsem = deromanize(page[i+1].text);
+            if (token.text === PROGRAM_PREFIX_TOKEN_TEXT) miscInfo.degree = iter.next().value.text;
+            if (token.text === SEMESTER_PREFIX_TOKEN_TEXT) miscInfo.currentsem = deromanize(iter.next().value.text);
 
-            token = page[++i];
+            token = iter.next().value;
         }
 
-        iter.val = i;
         return miscInfo;
     }
 
