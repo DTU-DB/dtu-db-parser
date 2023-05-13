@@ -71,7 +71,6 @@ function fcomp(a: number, b: number): boolean{
 export class PDFParser{
     pageNum: number = 0;
     pdf: PDFSource;
-    reader = new PdfReader();
     pages: Array<Array<PDFToken>> = []; 
     pageData: Array<PDFToken> = [];
     students: Array<Student> = [];
@@ -104,18 +103,21 @@ export class PDFParser{
     } 
 
     async readPDF(){
-        let pdf_promise: Promise<void>;
-        if (typeof this.pdf === 'string') pdf_promise = new Promise<void>((resolve, reject) => {
-            this.reader.parseFileItems(this.pdf, (err: Error, item: any) => {
+        const reader = new PdfReader();
+        let parser: (pdf: PDFSource, callback_fn: (err: Error, item: any) => void) => void; 
+
+        if (typeof this.pdf === 'string'){
+            parser = reader.parseFileItems.bind(reader)
+        }
+        else{
+            parser = reader.parseBuffer.bind(reader)
+        }
+
+        return new Promise<void>((resolve, reject) => {
+            parser(this.pdf, (err, item) => {
                 this.itemCallback(err, item, resolve, reject);
             });  
         });
-        else pdf_promise = new Promise<void>((resolve, reject) => {
-            this.reader.parseBuffer(this.pdf, (err: Error, item: any) => {
-                this.itemCallback(err, item, resolve, reject);
-            });
-        });
-        return pdf_promise;
     }
 
     async parsePages(){
