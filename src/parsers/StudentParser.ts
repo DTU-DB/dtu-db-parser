@@ -1,17 +1,9 @@
-import { PdfReader } from "pdfreader";
-import { Student } from "./interfaces/student";
 import { deromanize } from "romans";
+import { PDFParser } from "./PDFParser.js";
+import { PageIterator } from "./PageIterator.js";
+import { Student, EMPTY_GRADE, FAILING_GRADES } from "../models/index.js";
 
-type Coords = {
-    x: number,
-    y: number
-};
-
-type PDFSource = string | Buffer;
-type PDFToken = {
-    text: string,
-    coords: Coords
-};
+import type { PDFToken } from "./PDFParser.js";
 
 const PRECISION = 0.001;
 
@@ -27,11 +19,6 @@ const SUBJECT_PREFIX_TOKEN_TEXT = "Credits";
 const SUBJECT_INFO_REGEX = /:/;
 const SUBJECT_CREDIT_PREFIX_TOKEN_TEXT = "Papers Failed";
 const END_OF_PAGE_REGEX = /Page\s\d+/;
-
-const EMPTY_GRADE = "";
-const PASSING_GRADES = ["O", "A+", "A", "B+", "B", "C", "P"];
-const FAILING_GRADES = ["F", "DT", "RW", "RL", "AB", "I", "UFM"];
-const VALID_GRADES = [...PASSING_GRADES, ...FAILING_GRADES, EMPTY_GRADE];
 
 type StudentHeadersCoords = {
     name: Coords,
@@ -73,101 +60,14 @@ type MiscInfo = {
     currentsem: number
 }
 
-class PageIterator implements Iterator<PDFToken>{
-    private page: Array<PDFToken>;
-    private i = 0;
-
-    public lastToken: PDFToken = {text: "", coords: {x: 0, y: 0}};
-
-    constructor(page: Array<PDFToken>){
-        this.page = page;
-    }
-
-    next(...args: [] | [undefined]): IteratorResult<PDFToken, any> {
-        if (this.i < this.page.length){
-            const result = {
-                done: false,
-                value: this.page[this.i],
-            }
-            this.i++;
-            this.lastToken = this.page[this.i-1];
-            return result;
-        }
-        else{
-            return {
-                done: true,
-                value: undefined,
-            }
-        }
-    }  
-}
-
 // TODO: give better function name
 function fcomp(a: number, b: number): boolean{
     return Math.abs(a - b) <= PRECISION
 }
 
-export class PDFParser{
-    pageNum: number = 0;
-    pdf: PDFSource;
-    pages: Array<Array<PDFToken>> = []; 
-    pageData: Array<PDFToken> = [];
-    students: Array<Student> = [];
-    
-    constructor(pdf: PDFSource){
-        this.pdf = pdf;
-    }
+class StudentParser extends PDFParser{
+    public students: Array<Student> = [];
 
-    itemCallback(err: Error, item: any, resolve: any, reject: any){
-        if (!item){
-            this.pages.push(this.pageData)
-            this.pageData = [];
-            resolve()
-            return;
-        }
-
-        else if (item.page){
-            this.pageNum = item.page;
-            if (this.pageData.length){
-                this.pages.push(this.pageData)
-                this.pageData = [];
-            }
-        }
-
-        else if (item.text){
-            this.pageData.push({text: item.text.trim(), coords: {x: item.x, y: item.y}});
-        }
-
-        else if (err) reject(console.error("error:", err));
-    } 
-
-    async readPDF(){
-        const reader = new PdfReader();
-        let parser: (pdf: PDFSource, callback_fn: (err: Error, item: any) => void) => void; 
-
-        if (typeof this.pdf === 'string'){
-            parser = reader.parseFileItems.bind(reader)
-        }
-        else{
-            parser = reader.parseBuffer.bind(reader)
-        }
-
-        return new Promise<void>((resolve, reject) => {
-            parser(this.pdf, (err, item) => {
-                this.itemCallback(err, item, resolve, reject);
-            });
-        });
-    }
-
-    async parsePages(){
-        return new Promise<void>((resolve) => {
-            this.pages.forEach((page, i) => {
-                this.parsePage(page)
-            });
-            resolve();
-        }) 
-    }
-    
     parsePage(page: Array<PDFToken>){
         // for (let i = 0; i < page.length; ++i){
         //         let token = page[i];
@@ -185,7 +85,7 @@ export class PDFParser{
         }
     }
 
-    addStudents(iter: PageIterator, miscInfo: MiscInfo, subjectInfo: SubjectInfo, studentHeadersCoords: StudentHeadersCoords){
+    private addStudents(iter: PageIterator, miscInfo: MiscInfo, subjectInfo: SubjectInfo, studentHeadersCoords: StudentHeadersCoords){
         let token = iter.lastToken;
 
         while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
@@ -244,7 +144,7 @@ export class PDFParser{
 
     }
 
-    getSubjectInfo(iter: PageIterator): SubjectInfo{
+    private getSubjectInfo(iter: PageIterator): SubjectInfo{
         const subjectInfo  = new SubjectInfo()
         
         let token = iter.lastToken;
@@ -289,7 +189,7 @@ export class PDFParser{
         return subjectInfo;
     }
 
-    getStudentHeadersCoords(iter: PageIterator): StudentHeadersCoords{
+    private getStudentHeadersCoords(iter: PageIterator): StudentHeadersCoords{
         const studentHeadersCoords: StudentHeadersCoords = {
             name: {x: 0, y: 0},
             rollno: {x: 0, y: 0}
@@ -312,7 +212,7 @@ export class PDFParser{
         return studentHeadersCoords;
     }
 
-    getMiscInfo(iter: PageIterator){
+    private getMiscInfo(iter: PageIterator){
         let miscInfo: MiscInfo = {
             degree: "",
             currentsem: 0
@@ -331,7 +231,7 @@ export class PDFParser{
         return miscInfo;
     }
 
-    generateStudent(misc: MiscInfo, subject: SubjectInfo, student: StudentInfo): Student{
+    private generateStudent(misc: MiscInfo, subject: SubjectInfo, student: StudentInfo): Student{
         let s: Student = {
             rollno: student.rollno,
             name: student.name, 
@@ -372,8 +272,12 @@ export class PDFParser{
         return s;
     }
 
-    isFirstYearRollNo(rollno: string): boolean{
+    private isFirstYearRollNo(rollno: string): boolean{
         const FIRSTYEAR_CODE_REGEX = /[A|B]\d+/;
         return FIRSTYEAR_CODE_REGEX.test(rollno)
     }
+}
+
+export {
+    StudentParser
 }

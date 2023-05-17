@@ -1,11 +1,11 @@
-import { PDFParser } from "./PDFParser.js"
+import { StudentParser } from "./parsers/index.js";
 
 
 async function main(){
     const files = "E20_BTECH_II_1107.pdf, E21_BTECH_IV_1251.pdf, E22_BTECH_VI.pdf, O19_BTECH_1_1015.pdf, O20_BTECH_1183.pdf, O21_BTECH_V.pdf".split(", ")
     for(const file of files){
         
-        let pj = new PDFParser(`pdfs/${file}`)
+        let pj = new StudentParser(`pdfs/${file}`);
         
         await pj.readPDF();
         await pj.parsePages();
