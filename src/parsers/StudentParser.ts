@@ -1,7 +1,7 @@
 import { deromanize } from "romans";
 import { PDFParser } from "./PDFParser.js";
 import { PageIterator } from "./PageIterator.js";
-import { Student, EMPTY_GRADE, FAILING_GRADES } from "../models/index.js";
+import { Student, EMPTY_GRADE, FAILING_GRADES, departmentCodeToDepartmentName } from "../models/index.js";
 
 import type { PDFToken } from "./PDFParser.js";
 
@@ -231,7 +231,7 @@ class StudentParser extends PDFParser{
     }
 
     private generateStudent(misc: MiscInfo, subject: SubjectInfo, student: StudentInfo): Student{
-        let s: Student = {
+        const s: Student = {
             rollno: student.rollno,
             name: student.name, 
             firstyearrollno: student.firstyearrollno,
@@ -256,7 +256,12 @@ class StudentParser extends PDFParser{
         s.batch = validRollNoSplit[0]
 
         // TODO: implement deptCodeToDeptName()
-        // if(validRollNo === s.rollno) s.dept = {name: this.deptCodeToDeptName(validRollNoSplit[1]), code: validRollNoSplit[1]};
+        if(validRollNo === s.rollno){
+            s.dept = {
+                name: departmentCodeToDepartmentName(validRollNoSplit[1]), 
+                code: validRollNoSplit[1]
+            };
+        }
 
         for(let i = 0; i < subject.codes.length; i++){
             s.semester.subjects.push({
