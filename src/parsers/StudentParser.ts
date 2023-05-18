@@ -60,9 +60,8 @@ type MiscInfo = {
     currentsem: number
 }
 
-// TODO: give better function name
-function fcomp(a: number, b: number): boolean{
-    return Math.abs(a - b) <= PRECISION
+function isHorizontallyAligned(a: Coords, b: Coords): boolean{
+    return Math.abs(a.x - b.x) <= PRECISION
 }
 
 class StudentParser extends PDFParser{
@@ -94,7 +93,7 @@ class StudentParser extends PDFParser{
             }
             
             // Skip Row without Name or skip to next correct row.
-            if (!fcomp(token.coords.x, studentHeadersCoords.name.x)){
+            if (! isHorizontallyAligned(token.coords, studentHeadersCoords.name)){
                 token = iter.next().value;
                 continue;
             }
@@ -102,7 +101,7 @@ class StudentParser extends PDFParser{
             const studentInfo = new StudentInfo()
             
             // Name
-            while(fcomp(token.coords.x, studentHeadersCoords.name.x)){
+            while(isHorizontallyAligned(token.coords, studentHeadersCoords.name)){
                 if (studentInfo.name) studentInfo.name += " "
                 studentInfo.name += token.text;
                 token = iter.next().value;
@@ -119,11 +118,11 @@ class StudentParser extends PDFParser{
             
             // Grades
             studentInfo.grades = Array(subjectInfo.length).fill(EMPTY_GRADE);
-            let gradeInd = subjectInfo.headersCoords.subjects.findIndex(loc => fcomp(token.coords.x, loc.x));
+            let gradeInd = subjectInfo.headersCoords.subjects.findIndex(coords => isHorizontallyAligned(token.coords, coords));
             while(gradeInd !== -1){
                 studentInfo.grades[gradeInd] = token.text;
                 token = iter.next().value;
-                gradeInd = subjectInfo.headersCoords.subjects.findIndex(loc => fcomp(token.coords.x, loc.x));
+                gradeInd = subjectInfo.headersCoords.subjects.findIndex(coords => isHorizontallyAligned(token.coords, coords));
             }
             
             // Total Credits
@@ -157,9 +156,9 @@ class StudentParser extends PDFParser{
             let [subjectCode, subjectName] = token.text.split(':').map((ele: string) => ele.trim())
             subjectInfo.codes.push(subjectCode);
             subjectInfo.names.push(subjectName);
-            let tokenCoords = token.coords;
+            let subjectTokenCoords = token.coords;
             token = iter.next().value;
-            while(fcomp(token.coords.x, tokenCoords.x)){
+            while(isHorizontallyAligned(token.coords, subjectTokenCoords)){
                 subjectInfo.names[subjectInfo.names.length - 1] += " " + token.text;
                 token = iter.next().value;
             }
