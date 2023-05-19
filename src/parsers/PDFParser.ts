@@ -16,9 +16,9 @@ abstract class PDFParser{
         this.pdf = pdf;
     }
     
-    abstract parsePage(page: Array<PDFToken>): void;
+    protected abstract parsePage(page: Array<PDFToken>): void;
     
-    itemCallback(err: Error, item: any, resolve: any, reject: any){
+    private itemCallback(err: Error, item: any, resolve: any, reject: any){
         if (!item){
             this.pages.push(this.pageData)
             this.pageData = [];
@@ -41,7 +41,7 @@ abstract class PDFParser{
         else if (err) reject(console.error("error:", err));
     } 
 
-    async readPDF(){
+    public async readPDF(){
         const reader = new PdfReader();
         let parser: (pdf: PDFSource, callback_fn: (err: Error, item: any) => void) => void; 
 
@@ -59,7 +59,7 @@ abstract class PDFParser{
         });
     }
 
-    async parsePages(){
+    public async parsePages(): Promise<any>{
         return new Promise<void>((resolve) => {
             this.pages.forEach((page, i) => {
                 this.parsePage(page)

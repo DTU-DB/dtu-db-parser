@@ -65,9 +65,14 @@ function isHorizontallyAligned(a: Coords, b: Coords): boolean{
 }
 
 class StudentParser extends PDFParser{
-    public students: Array<Student> = [];
+    private students: Array<Student> = [];
 
-    parsePage(page: Array<PDFToken>){
+    public async parsePages(): Promise<Array<Student>> {
+        await super.parsePages();
+        return this.students;
+    }
+
+    protected parsePage(page: Array<PDFToken>){
         // for (let i = 0; i < page.length; ++i){
         //         let token = page[i];
         //         console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
