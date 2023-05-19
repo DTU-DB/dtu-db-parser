@@ -1,4 +1,4 @@
-export interface Subject{
+export interface SemesterSubject{
     name: string,
     code: string,
     credits: number,
@@ -10,5 +10,5 @@ export interface Semester{
     number: number,
     totalcredits: number,
     sgpa: number,
-    subjects: Array<Subject>,
+    subjects: Array<SemesterSubject>,
 }
