@@ -11,9 +11,9 @@ $ npm install unknownblueguy6/dtu_db_parser
 
 2. Import it into your TypeScript project.
 ```ts
-import  { Parsers } from "dtu_db_parser"
+import  { Parsers } from "dtu_db_parser";
 
-async main(){
+async function main(){
     // pdf can be in the form of a byte buffer, or a file path
     const pdf: PDFSource = "result.pdf";
     const parser = new Parsers.StudentParser(pdf);
@@ -21,5 +21,9 @@ async main(){
     await parser.readPDF();
     
     const students: Array<Student> = await parser.parsePages();
+    
+    console.log(students[0]);
 }
+
+await main();
 ```
