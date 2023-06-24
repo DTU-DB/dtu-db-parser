@@ -260,7 +260,6 @@ class StudentParser extends PDFParser{
         
         s.batch = validRollNoSplit[0]
 
-        // TODO: implement deptCodeToDeptName()
         if(validRollNo === s.rollno){
             s.dept = {
                 name: departmentCodeToDepartmentName(validRollNoSplit[1]), 
