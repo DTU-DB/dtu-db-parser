@@ -14,6 +14,7 @@ const RESULT_BLOCK_START_TOKEN_TEXT = "Sr.No";
 
 const NAME_HEADER_TOKEN_TEXT = "Name";
 const ROLLNO_HEADER_TOKEN_TEXT = "Roll No.";
+const SGPA_HEADER_TOKEN_TEXT = "SGPA";
 
 const SUBJECT_PREFIX_TOKEN_TEXT = "Credits";
 const SUBJECT_INFO_REGEX = /:/;
@@ -51,7 +52,7 @@ class StudentInfo{
     firstyearrollno: string = "";
     grades: Array<string> = [];
     totalcredits: number = 0;
-    sgpa: number = 0;
+    sgpa: number = -1;
     failed: Array<boolean> = []
 };
 
@@ -62,6 +63,10 @@ type MiscInfo = {
 
 function isHorizontallyAligned(a: Coords, b: Coords): boolean{
     return Math.abs(a.x - b.x) <= PRECISION
+}
+
+function areNullCoords(a: Coords){
+    return (a.x === 0 && a.y === 0);
 }
 
 class StudentParser extends PDFParser{
@@ -75,7 +80,7 @@ class StudentParser extends PDFParser{
     protected parsePage(page: Array<PDFToken>){
         // for (let i = 0; i < page.length; ++i){
         //         let token = page[i];
-        //         console.log('"%s" \t (%d, %d)', token.text, token.x, token.y)
+        //         console.log(`${token.text} \t (${token.coords.x},${token.coords.y})`)
         // }
             
         const iter = new PageIterator(page);
@@ -135,8 +140,10 @@ class StudentParser extends PDFParser{
             token = iter.next().value;
             
             // SGPA
-            studentInfo.sgpa = parseFloat(token.text);
-            token = iter.next().value;
+            if(!areNullCoords(subjectInfo.headersCoords.sgpa)){
+                studentInfo.sgpa = parseFloat(token.text);
+                token = iter.next().value;
+            }
             
             // Papers Failed
             studentInfo.failed = studentInfo.grades.map(grade => FAILING_GRADES.includes(grade));
@@ -179,8 +186,10 @@ class StudentParser extends PDFParser{
         subjectInfo.headersCoords.totalcredits = token.coords;
         token = iter.next().value;
 
-        subjectInfo.headersCoords.sgpa = token.coords;
-        token = iter.next().value;
+        if(token.text === SGPA_HEADER_TOKEN_TEXT){
+            subjectInfo.headersCoords.sgpa = token.coords;
+            token = iter.next().value;
+        }
 
         subjectInfo.headersCoords.failed = token.coords;
         token = iter.next().value;

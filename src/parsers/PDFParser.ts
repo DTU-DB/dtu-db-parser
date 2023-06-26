@@ -62,6 +62,9 @@ abstract class PDFParser{
     public async parsePages(): Promise<any>{
         return new Promise<void>((resolve) => {
             this.pages.forEach((page, i) => {
+                // if(i === 0){
+                //     this.parsePage(page)
+                // }
                 this.parsePage(page)
             });
             resolve();
