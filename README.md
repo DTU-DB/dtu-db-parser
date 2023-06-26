@@ -6,12 +6,12 @@ This is a part of the overall DTU DB project.
 ## How to use
 1. Install the extension from Github.
 ```bash
-$ npm install unknownblueguy6/dtu_db_parser
+$ npm install unknownblueguy6/dtu-db-parser
 ```
 
 2. Import it into your TypeScript project.
 ```ts
-import  { Parsers } from "dtu_db_parser";
+import  { Parsers } from "dtu-db-parser";
 
 async function main(){
     // pdf can be in the form of a byte buffer, or a file path

@@ -1,6 +1,6 @@
 {
-  "name": "dtu_db_parser",
-  "version": "1.0.0",
+  "name": "dtu-db-parser",
+  "version": "1.0.1",
   "description": "",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
