@@ -65,7 +65,11 @@ abstract class PDFParser{
                 // if(i === 0){
                 //     this.parsePage(page)
                 // }
-                this.parsePage(page)
+                try {
+                    this.parsePage(page);
+                } catch (error){
+                    console.error(`Unable to parse Page ${i+1}`);
+                }
             });
             resolve();
         }) 
