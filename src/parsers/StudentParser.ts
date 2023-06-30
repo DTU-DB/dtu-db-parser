@@ -231,13 +231,24 @@ class StudentParser extends PDFParser{
             currentsem: 0
         }
         
-        let token = iter.next().value;
+        let token = iter.next().value as PDFToken;
         
         while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
             
-            if (token.text === PROGRAM_PREFIX_TOKEN_TEXT) miscInfo.degree = iter.next().value.text;
-            if (token.text === SEMESTER_PREFIX_TOKEN_TEXT) miscInfo.currentsem = deromanize(iter.next().value.text);
-
+            if (token.text === PROGRAM_PREFIX_TOKEN_TEXT){
+                token = iter.next().value;
+                miscInfo.degree = token.text;
+                const degreeTokenCoords = token.coords;
+                token = iter.next().value;
+                while(isHorizontallyAligned(degreeTokenCoords, token.coords)){
+                    miscInfo.degree += ` ${token.text}`;
+                    token = iter.next().value;
+                }
+            }
+            
+            if (token.text === SEMESTER_PREFIX_TOKEN_TEXT){
+                miscInfo.currentsem = deromanize(iter.next().value.text);
+            }
             token = iter.next().value;
         }
 
