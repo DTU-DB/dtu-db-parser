@@ -11,6 +11,7 @@ abstract class PDFParser{
     private pdf: PDFSource;
     private pages: Array<Array<PDFToken>> = []; 
     private pageData: Array<PDFToken> = [];
+    private errorPages: Array<number> = [];
     
     constructor(pdf: PDFSource){
         this.pdf = pdf;
@@ -68,9 +69,12 @@ abstract class PDFParser{
                 try {
                     this.parsePage(page);
                 } catch (error){
-                    console.error(`Unable to parse Page ${i+1}`);
+                    this.errorPages.push(i+1);
                 }
             });
+            if (this.errorPages.length !== 0){
+                throw new Error(`Unable to parse Pages ${this.errorPages}`);
+            }
             resolve();
         }) 
     }
