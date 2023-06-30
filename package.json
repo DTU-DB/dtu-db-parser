@@ -11,7 +11,7 @@
     "build": "npm run clean && npm run tsc",
     "build_module": "npm run clean && npm run tsc_module",
     "clean": "rimraf ./lib",
-    "start": "node lib/main.js",
+    "start": "npm run tsc && node lib/main.js",
     "postinstall": "npm run build_module",
     "dev": "concurrently \"npx tsc --watch\" \"nodemon -q lib/main.js\""
   },
