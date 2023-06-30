@@ -160,6 +160,10 @@ class StudentParser extends PDFParser{
         
         let token = iter.lastToken;
 
+        if (END_OF_PAGE_REGEX.test(token.text)){
+            return subjectInfo;
+        }
+
         if (token.text === SUBJECT_PREFIX_TOKEN_TEXT){
             token = iter.next().value
         }
@@ -210,6 +214,10 @@ class StudentParser extends PDFParser{
         
         let token = iter.lastToken;
 
+        if (END_OF_PAGE_REGEX.test(token.text)){
+            return studentHeadersCoords;
+        }
+
         while(token.text !== SUBJECT_PREFIX_TOKEN_TEXT){
             if (token.text === NAME_HEADER_TOKEN_TEXT){
                 studentHeadersCoords.name = token.coords
@@ -249,6 +257,12 @@ class StudentParser extends PDFParser{
             if (token.text === SEMESTER_PREFIX_TOKEN_TEXT){
                 miscInfo.currentsem = deromanize(iter.next().value.text);
             }
+
+            if (END_OF_PAGE_REGEX.test(token.text)){
+                return miscInfo;
+            }
+
+
             token = iter.next().value;
         }
 
