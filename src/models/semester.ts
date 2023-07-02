@@ -9,6 +9,6 @@ export interface SemesterSubject{
 export interface Semester{
     number: number,
     totalcredits: number,
-    sgpa: number,
+    sgpa?: number,
     subjects: Array<SemesterSubject>,
 }

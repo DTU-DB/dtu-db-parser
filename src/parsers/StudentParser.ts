@@ -29,7 +29,7 @@ type StudentHeadersCoords = {
 type SubjectHeadersCoords = {
     subjects: Array<Coords>,
     totalcredits: Coords,
-    sgpa: Coords,
+    sgpa?: Coords,
     failed: Coords
 }
 
@@ -40,7 +40,7 @@ class SubjectInfo{
     headersCoords: SubjectHeadersCoords = {
         subjects: [],
         totalcredits: {x: 0, y: 0},
-        sgpa: {x: 0, y: 0},
+        sgpa: undefined,
         failed: {x: 0, y: 0},
     };
     length: number = 0;
@@ -52,7 +52,7 @@ class StudentInfo{
     firstyearrollno: string = "";
     grades: Array<string> = [];
     totalcredits: number = 0;
-    sgpa: number = -1;
+    sgpa?: number;
     failed: Array<boolean> = []
 };
 
@@ -63,10 +63,6 @@ type MiscInfo = {
 
 function isHorizontallyAligned(a: Coords, b: Coords): boolean{
     return Math.abs(a.x - b.x) <= PRECISION
-}
-
-function areNullCoords(a: Coords){
-    return (a.x === 0 && a.y === 0);
 }
 
 class StudentParser extends PDFParser{
@@ -140,7 +136,7 @@ class StudentParser extends PDFParser{
             token = iter.next().value;
             
             // SGPA
-            if(!areNullCoords(subjectInfo.headersCoords.sgpa)){
+            if(subjectInfo.headersCoords.sgpa !== undefined){
                 studentInfo.sgpa = parseFloat(token.text);
                 token = iter.next().value;
             }
