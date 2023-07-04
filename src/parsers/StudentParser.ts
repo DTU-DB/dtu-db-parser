@@ -1,7 +1,7 @@
 import { deromanize } from "romans";
 import { PDFParser } from "./PDFParser.js";
 import { PageIterator } from "./PageIterator.js";
-import { Student, EMPTY_GRADE, FAILING_GRADES, departmentCodeToDepartmentName } from "../models/index.js";
+import { Student, Subject, EMPTY_GRADE, FAILING_GRADES, departmentCodeToDepartmentName } from "../models/index.js";
 
 import type { PDFToken } from "./PDFParser.js";
 
@@ -67,10 +67,18 @@ function isHorizontallyAligned(a: Coords, b: Coords): boolean{
 
 class StudentParser extends PDFParser{
     private students: Array<Student> = [];
+    private subjects: Map<string, Subject> = new Map();
 
     public async parsePages(): Promise<Array<Student>> {
         await super.parsePages();
         return this.students;
+    }
+
+    public async getSubjects(): Promise<Array<Subject>> {
+        for(const subCode of this.subjects.keys()){
+            this.subjects.get(subCode)!.calculateCentralTendencies();
+        }
+        return [...this.subjects.values()]
     }
 
     protected parsePage(page: Array<PDFToken>){
@@ -86,11 +94,11 @@ class StudentParser extends PDFParser{
         while (!END_OF_PAGE_REGEX.test(iter.lastToken.text)){
             const studentHeadersCoords = this.getStudentHeadersCoords(iter);
             const subjectInfo = this.getSubjectInfo(iter);
-            this.addStudents(iter, miscInfo, subjectInfo, studentHeadersCoords);
+            this.addStudentsAndSubjects(iter, miscInfo, subjectInfo, studentHeadersCoords);
         }
     }
 
-    private addStudents(iter: PageIterator, miscInfo: MiscInfo, subjectInfo: SubjectInfo, studentHeadersCoords: StudentHeadersCoords){
+    private addStudentsAndSubjects(iter: PageIterator, miscInfo: MiscInfo, subjectInfo: SubjectInfo, studentHeadersCoords: StudentHeadersCoords){
         let token = iter.lastToken;
 
         while(token.text !== RESULT_BLOCK_START_TOKEN_TEXT){
@@ -144,7 +152,12 @@ class StudentParser extends PDFParser{
             // Papers Failed
             studentInfo.failed = studentInfo.grades.map(grade => FAILING_GRADES.includes(grade));
 
-            this.students.push(this.generateStudent(miscInfo, subjectInfo, studentInfo));
+            const student = this.generateStudent(miscInfo, subjectInfo, studentInfo);
+            this.students.push(student);
+
+            if(subjectInfo.headersCoords.sgpa !== undefined){
+                this.updateSubjectsFrequency(student);
+            }
         }
 
         return;
@@ -308,6 +321,18 @@ class StudentParser extends PDFParser{
         }
 
         return s;
+    }
+
+    private updateSubjectsFrequency(student: Student){
+        for(const semSub of student.semester.subjects){
+            if(!this.subjects.has(semSub.code)){
+                this.subjects.set(
+                    semSub.code, 
+                    new Subject(semSub.code, semSub.name, semSub.credits)
+                );
+            }
+            this.subjects.get(semSub.code)!.incrementGrade(semSub.grade)
+        }
     }
 
     private isFirstYearRollNo(rollno: string): boolean{

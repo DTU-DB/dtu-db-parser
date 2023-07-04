@@ -29,29 +29,48 @@ EDGE_CASE_TESTS.set("Empty Name"                    , "EMPTY_NAME")
 EDGE_CASE_TESTS.set("No SGPA Data Column"           , "NO_SGPA")
 // EDGE_CASE_TESTS.set("Consolidated Result"           , "")
 
-function runTest(testName: string, fileName: string){
+function runParseTest(testName: string, filePath: string){
+    const parser = new Parsers.StudentParser(`${__dirname}/pdf/${filePath}.pdf`);
     test(`running "${testName}" test`, async () => {
-        const parser = new Parsers.StudentParser(`${__dirname}/pdf/${fileName}.pdf`);
         await parser.readPDF();
-        const result = await parser.parsePages();
-        const expectedResult = JSON.parse(await fs.readFile(`${__dirname}/json/${fileName}.json`, 'utf8')) as Array<StudentModels.Student>;
-        expect(result).toEqual<Array<StudentModels.Student>>(expectedResult);
+        const students = await parser.parsePages();
+        const expectedResult = JSON.parse(await fs.readFile(`${__dirname}/json/${filePath}.json`, 'utf8')) as Array<StudentModels.Student>;
+        expect(students).toEqual<Array<StudentModels.Student>>(expectedResult);
     });
+    return parser;
+}
+
+function runSubjectTest(testName: string, filePath: string, parser: Parsers.StudentParser){
+    test(`running "${testName}" test`, async () => {
+        const subjects = await parser.getSubjects();
+        const expectedResult = JSON.parse(await fs.readFile(`${__dirname}/json/${filePath}.json`, 'utf8')) as Array<StudentModels.Subject>;
+        expect(subjects).toEqual<Array<StudentModels.Subject>>(expectedResult);
+    })
 }
 
 describe('testing Parsers.StudentParser', () => {
+    const parsers: Map<string, Parsers.StudentParser> = new Map();
     describe('running Non-Ph.D. tests', () => {
-        NON_PHD_NORMAL_TESTS.forEach((fileName, testName) => {
-            if (fileName !== ""){
-                runTest(testName, fileName);
-            }
+        describe('running student tests', () => {
+            NON_PHD_NORMAL_TESTS.forEach((fileName, testName) => {
+                if (fileName !== ""){
+                    parsers.set(testName, runParseTest(testName, `non_phd/students/${fileName}`));
+                }
+            });
+        });
+        describe('running subject tests', () => {
+            NON_PHD_NORMAL_TESTS.forEach((fileName, testName) => {
+                if (fileName !== ""){
+                    runSubjectTest(testName, `non_phd/subjects/${fileName}`, parsers.get(testName)!);
+                }
+            });
         });
     });
 
     describe('running edge case tests', () => {
         EDGE_CASE_TESTS.forEach((fileName, testName) => {
             if (fileName !== ""){
-                runTest(testName, fileName);
+                runParseTest(testName, `edge_cases/${fileName}`);
             }
         });
     });
