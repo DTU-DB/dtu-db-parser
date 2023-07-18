@@ -106,5 +106,7 @@ function departmentCodeToDepartmentName(code: string): string{
 
 export {
 	Department,
-	departmentCodeToDepartmentName
+	departmentCodeToDepartmentName,
+	DEPARTMENT_CODES,
+	DEPARTMENT_NAMES
 };

@@ -1,7 +1,7 @@
 import { deromanize } from 'romans';
 import { PDFParser } from './PDFParser.js';
 import { PageIterator } from './PageIterator.js';
-import { Student, Subject, EMPTY_GRADE, FAILING_GRADES, departmentCodeToDepartmentName } from '../models/index.js';
+import { Student, Subject, EMPTY_GRADE, FAILING_GRADES, departmentCodeToDepartmentName, isFirstYearRollno } from '../models/index.js';
 
 import type { PDFToken } from './PDFParser.js';
 
@@ -49,7 +49,6 @@ class SubjectInfo{
 class StudentInfo{
 	name: string = '';
 	rollno: string = '';
-	firstyearrollno: string = '';
 	grades: Array<string> = [];
 	totalcredits: number = 0;
 	sgpa?: number;
@@ -125,9 +124,7 @@ class StudentParser extends PDFParser{
 			token = iter.next().value;
 
 			// Roll No.
-			const rollno = token.text;
-			if (this.isFirstYearRollNo(rollno)) studentInfo.firstyearrollno = rollno;
-			else studentInfo.rollno = rollno;
+			studentInfo.rollno = token.text;
 			token = iter.next().value;
             
 			// Grades
@@ -282,7 +279,6 @@ class StudentParser extends PDFParser{
 		const s: Student = {
 			rollno: student.rollno,
 			name: student.name, 
-			firstyearrollno: student.firstyearrollno,
 			currentsem: misc.currentsem,
 			batch: '', 
 			dept: {
@@ -298,16 +294,13 @@ class StudentParser extends PDFParser{
 			}
 		};
 
-		const validRollNo = s.rollno ? s.rollno: s.firstyearrollno;
-		const validRollNoSplit = validRollNo.split('/') ;
+		const rollnoSplit = s.rollno.split('/') ;
         
-		s.batch = validRollNoSplit[0];
+		s.batch = rollnoSplit[0];
+		s.dept.code = rollnoSplit[1];
 
-		if(validRollNo === s.rollno){
-			s.dept = {
-				name: departmentCodeToDepartmentName(validRollNoSplit[1]), 
-				code: validRollNoSplit[1]
-			};
+		if(!isFirstYearRollno(s.rollno)){
+			s.dept.name = departmentCodeToDepartmentName(rollnoSplit[1]);
 		}
 
 		for(let i = 0; i < subject.codes.length; i++){
@@ -333,11 +326,6 @@ class StudentParser extends PDFParser{
 			}
             this.subjects.get(semSub.code)!.incrementGrade(semSub.grade);
 		}
-	}
-
-	private isFirstYearRollNo(rollno: string): boolean{
-		const FIRSTYEAR_CODE_REGEX = /[A|B]\d+/;
-		return FIRSTYEAR_CODE_REGEX.test(rollno);
 	}
 }
 
