@@ -1,1 +1,1 @@
-export * from "./StudentParser.js"
+export * from './StudentParser.js';

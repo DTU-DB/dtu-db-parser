@@ -1,5 +1,5 @@
-import { Department } from "./dept.js";
-import { Semester } from "./semester.js";
+import { Department } from './dept.js';
+import { Semester } from './semester.js';
 
 export interface Student{
     rollno: string,

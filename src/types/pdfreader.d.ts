@@ -1,1 +1,1 @@
-declare module "pdfreader"
+declare module 'pdfreader'
