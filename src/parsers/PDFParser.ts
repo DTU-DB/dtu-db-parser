@@ -19,7 +19,7 @@ abstract class PDFParser{
 	
 	protected abstract parsePage(page: Array<PDFToken>): void;
 	
-	private itemCallback(err: Error, item: any, resolve: any, reject: any){
+	private itemCallback(err: Error, item: any, resolve: (value: void | PromiseLike<void>) => void, reject: (reason?: any) => void){
 		if (!item){
 			this.pages.push(this.pageData);
 			this.pageData = [];
@@ -42,7 +42,7 @@ abstract class PDFParser{
 		else if (err) reject(console.error('error:', err));
 	} 
 
-	public async readPDF(){
+	public async readPDF(): Promise<void>{
 		const reader = new PdfReader();
 		let parser: (pdf: PDFSource, callback_fn: (err: Error, item: any) => void) => void; 
 
@@ -60,23 +60,20 @@ abstract class PDFParser{
 		});
 	}
 
-	public async parsePages(): Promise<any>{
-		return new Promise<void>((resolve) => {
-			this.pages.forEach((page, i) => {
-				// if(i === 0){
-				//     this.parsePage(page)
-				// }
-				try {
-					this.parsePage(page);
-				} catch (error){
-					this.errorPages.push(i+1);
-				}
-			});
-			if (this.errorPages.length !== 0){
-				throw new Error(`Unable to parse Pages ${this.errorPages}`);
+	public parsePages(): void{
+		this.pages.forEach((page, i) => {
+			// if(i === 0){
+			//     this.parsePage(page)
+			// }
+			try {
+				this.parsePage(page);
+			} catch (error){
+				this.errorPages.push(i+1);
 			}
-			resolve();
-		}); 
+		});
+		if (this.errorPages.length !== 0){
+			throw new Error(`Unable to parse Pages ${this.errorPages}`);
+		}
 	}
 
 }

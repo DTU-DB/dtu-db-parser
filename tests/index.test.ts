@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const TEST_TIMEOUT_MS = 10000;
+// const TEST_TIMEOUT_MS = 10000;
 
 const NON_PHD_NORMAL_TESTS: Map<string, string> = new Map();
 NON_PHD_NORMAL_TESTS.set('First Year B.Tech.'            , 'BTECH_1Y');
@@ -33,7 +33,8 @@ function runParseTest(testName: string, filePath: string){
 	const parser = new Parsers.StudentParser(`${__dirname}/pdf/${filePath}.pdf`);
 	test(`running "${testName}" test`, async () => {
 		await parser.readPDF();
-		const students = await parser.parsePages();
+		parser.parsePages();
+		const students = parser.getStudents();
 		const expectedResult = JSON.parse(await fs.readFile(`${__dirname}/json/${filePath}.json`, 'utf8')) as Array<StudentModels.Student>;
 		expect(students).toEqual<Array<StudentModels.Student>>(expectedResult);
 	});
@@ -42,7 +43,7 @@ function runParseTest(testName: string, filePath: string){
 
 function runSubjectTest(testName: string, filePath: string, parser: Parsers.StudentParser){
 	test(`running "${testName}" test`, async () => {
-		const subjects = await parser.getSubjects();
+		const subjects = parser.getSubjects();
 		const expectedResult = JSON.parse(await fs.readFile(`${__dirname}/json/${filePath}.json`, 'utf8')) as Array<StudentModels.Subject>;
 		expect(subjects).toEqual<Array<StudentModels.Subject>>(expectedResult);
 	});

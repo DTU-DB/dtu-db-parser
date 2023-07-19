@@ -18,7 +18,7 @@ const SGPA_HEADER_TOKEN_TEXT = 'SGPA';
 
 const SUBJECT_PREFIX_TOKEN_TEXT = 'Credits';
 const SUBJECT_INFO_REGEX = /:/;
-const SUBJECT_CREDIT_PREFIX_TOKEN_TEXT = 'Papers Failed';
+// const SUBJECT_CREDIT_PREFIX_TOKEN_TEXT = 'Papers Failed';
 const END_OF_PAGE_REGEX = /Page\s\d+/;
 
 type StudentHeadersCoords = {
@@ -68,12 +68,11 @@ class StudentParser extends PDFParser{
 	private students: Array<Student> = [];
 	private subjects: Map<string, Subject> = new Map();
 
-	public async parsePages(): Promise<Array<Student>> {
-		await super.parsePages();
+	public getStudents(): Array<Student> {
 		return this.students;
 	}
 
-	public async getSubjects(): Promise<Array<Subject>> {
+	public getSubjects(): Array<Subject> {
 		for(const subCode of this.subjects.keys()){
             this.subjects.get(subCode)!.calculateCentralTendencies();
 		}
